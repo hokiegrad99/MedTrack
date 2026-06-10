@@ -49,7 +49,7 @@
                     <i class="fa-solid fa-upload"></i> Import
                 </button>
                 <input type="file" id="importFile" accept=".csv,.json" style="display:none">
-                <a href="report.html" class="btn btn-outline" id="reportBtn" aria-label="Open tax summary report" onclick="event.preventDefault(); window.open('report.html?year=' + document.getElementById('taxYear').value, '_blank');">
+                <a href="report.html" class="btn btn-outline" id="reportBtn" aria-label="Open tax summary report" onclick="event.preventDefault(); window.location.href='report.html?year=' + document.getElementById('taxYear').value;">
                     <i class="fa-solid fa-file-lines"></i> Tax Report
                 </a>
                 <button class="btn btn-outline" id="exportBtn">

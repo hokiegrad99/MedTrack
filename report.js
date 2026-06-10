@@ -52,7 +52,7 @@ function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;');
 }
 
 async function loadExpenses(year) {
@@ -67,6 +67,12 @@ async function initReport() {
     await initAuth();
     const params = new URLSearchParams(window.location.search);
     const year = parseInt(params.get('year')) || new Date().getFullYear();
+
+    // Set back button href immediately so it's correct even if auth is slow
+    const backBtn = document.getElementById('backToTrackerBtn');
+    if (backBtn) {
+        backBtn.href = 'index.html?year=' + encodeURIComponent(year);
+    }
 
     document.getElementById('reportYear').textContent = year;
     document.title = `Medical Expense Tax Summary — ${year}`;

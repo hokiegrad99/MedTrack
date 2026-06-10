@@ -3,9 +3,11 @@
    Multi-user support with password-protected localStorage
    ======================================== */
 
+const VERIFY_PLAINTEXT = 'medtrack-verify';
+
+// Fallback hardcoded salt/IV for backward compatibility with legacy accounts
 const VERIFY_SALT = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 const VERIFY_IV = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-const VERIFY_PLAINTEXT = 'medtrack-verify';
 
 let authResolve = null;
 let currentUser = null;
@@ -77,25 +79,33 @@ async function decryptData(encryptedBase64, password) {
 // ========================================
 
 async function createVerificationHash(password) {
-    const key = await deriveKey(password, VERIFY_SALT);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt);
     const encrypted = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: VERIFY_IV },
+        { name: 'AES-GCM', iv },
         key,
         new TextEncoder().encode(VERIFY_PLAINTEXT)
     );
-    return btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+    return {
+        hash: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+        salt: btoa(String.fromCharCode(...salt)),
+        iv: btoa(String.fromCharCode(...iv))
+    };
 }
 
-async function verifyPassword(password, hash) {
+async function verifyPassword(password, username, hash) {
     try {
-        const key = await deriveKey(password, VERIFY_SALT);
+        const salt = getUserSalt(username);
+        const iv = getUserIv(username);
+        const key = await deriveKey(password, salt);
         const binary = atob(hash);
         const encrypted = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) {
             encrypted[i] = binary.charCodeAt(i);
         }
         const decrypted = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: VERIFY_IV },
+            { name: 'AES-GCM', iv },
             key,
             encrypted
         );
@@ -137,6 +147,36 @@ function setVerificationHash(username, hash) {
     localStorage.setItem(`medtrack_verify_${username}`, hash);
 }
 
+function getUserSalt(username) {
+    const stored = localStorage.getItem(`medtrack_salt_${username}`);
+    if (stored) {
+        const binary = atob(stored);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+    return VERIFY_SALT; // fallback for legacy accounts
+}
+
+function getUserIv(username) {
+    const stored = localStorage.getItem(`medtrack_iv_${username}`);
+    if (stored) {
+        const binary = atob(stored);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+    return VERIFY_IV; // fallback for legacy accounts
+}
+
+function setUserSalt(username, saltB64) {
+    localStorage.setItem(`medtrack_salt_${username}`, saltB64);
+}
+
+function setUserIv(username, ivB64) {
+    localStorage.setItem(`medtrack_iv_${username}`, ivB64);
+}
+
 // ========================================
 // Public API
 // ========================================
@@ -168,10 +208,23 @@ function getCurrentPassword() {
 }
 
 function logout() {
+    const user = currentUser;
     currentUser = null;
     currentPassword = null;
     localStorage.removeItem('medtrack_current_user');
-    try { localStorage.removeItem('medtrack_current_password'); } catch (e) {}
+    try { sessionStorage.removeItem('medtrack_current_password'); } catch (e) {}
+    
+    // Clear all encrypted data for this user to prevent stale data on shared computers
+    if (user) {
+        const prefix = `medtrack_data_${user}_`;
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(prefix)) {
+                localStorage.removeItem(key);
+            }
+        }
+    }
+    
     location.reload();
 }
 
@@ -187,15 +240,15 @@ function initAuth() {
             return;
         }
         const savedUser = localStorage.getItem('medtrack_current_user');
-        const savedPassword = (() => { try { return localStorage.getItem('medtrack_current_password'); } catch (e) { return null; } })();
+        const savedPassword = (() => { try { return sessionStorage.getItem('medtrack_current_password'); } catch (e) { return null; } })();
 
         if (savedUser && savedPassword && hasUser(savedUser)) {
             const hash = getVerificationHash(savedUser);
-            verifyPassword(savedPassword, hash).then(valid => {
+            verifyPassword(savedPassword, savedUser, hash).then(valid => {
                 if (valid) {
                     onLoginSuccess(savedUser, savedPassword);
                 } else {
-                    try { localStorage.removeItem('medtrack_current_password'); } catch (e) {}
+                    try { sessionStorage.removeItem('medtrack_current_password'); } catch (e) {}
                     renderAuthOverlay(savedUser);
                 }
             });
@@ -450,7 +503,7 @@ async function handleLogin(e) {
     }
 
     const hash = getVerificationHash(username);
-    const valid = await verifyPassword(password, hash);
+    const valid = await verifyPassword(password, username, hash);
     if (!valid) {
         showAuthError('Incorrect password.');
         return;
@@ -471,7 +524,7 @@ async function handleWelcomeLogin(e) {
     }
 
     const hash = getVerificationHash(username);
-    const valid = await verifyPassword(password, hash);
+    const valid = await verifyPassword(password, username, hash);
     if (!valid) {
         showAuthError('Incorrect password.');
         return;
@@ -508,9 +561,11 @@ async function handleSignup(e) {
         return;
     }
 
-    const hash = await createVerificationHash(password);
+    const { hash, salt, iv } = await createVerificationHash(password);
     addUser(username);
     setVerificationHash(username, hash);
+    setUserSalt(username, salt);
+    setUserIv(username, iv);
 
     // Pre-create empty encrypted data for current year so login works immediately
     const year = new Date().getFullYear();
@@ -524,7 +579,7 @@ function onLoginSuccess(username, password) {
     currentUser = username;
     currentPassword = password;
     localStorage.setItem('medtrack_current_user', username);
-    try { localStorage.setItem('medtrack_current_password', password); } catch (e) {}
+    try { sessionStorage.setItem('medtrack_current_password', password); } catch (e) {}
     hideAuthOverlay();
     if (authResolve) {
         authResolve();
@@ -558,7 +613,7 @@ function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;');
 }
 
 // ========================================

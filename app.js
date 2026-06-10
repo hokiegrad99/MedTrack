@@ -99,6 +99,20 @@ const elements = {
 
 async function init() {
     populateTaxYearOptions();
+    // Check URL for year parameter (e.g., returning from report page)
+    const urlParams = new URLSearchParams(window.location.search);
+    const yearParam = parseInt(urlParams.get('year'));
+    if (yearParam && !isNaN(yearParam)) {
+        const option = elements.taxYear.querySelector(`option[value="${yearParam}"]`);
+        if (option) {
+            option.selected = true;
+            state.taxYear = yearParam;
+        }
+        // Clean up the URL so a refresh doesn't keep the param
+        if (window.history.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }
     await initAuth();
     setupEventListeners();
     setDefaultDate();
@@ -189,6 +203,19 @@ function setupEventListeners() {
         if (e.target === elements.deleteModal) hideDeleteModal();
     });
 
+    // Event delegation for edit/delete buttons (replaces inline onclick handlers)
+    elements.expenseTableBody.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.action-edit');
+        const deleteBtn = e.target.closest('.action-delete');
+        if (editBtn) {
+            e.stopPropagation();
+            populateEditForm(editBtn.dataset.id);
+        } else if (deleteBtn) {
+            e.stopPropagation();
+            showDeleteModal(deleteBtn.dataset.id);
+        }
+    });
+
     // Keyboard shortcut: Escape to cancel edit / close modal
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -255,8 +282,23 @@ async function loadData() {
     }
 }
 
+function estimateStorageUsage() {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const value = localStorage.getItem(key) || '';
+        total += (key.length + value.length) * 2; // UTF-16 bytes
+    }
+    return total;
+}
+
 async function saveData() {
     try {
+        const usage = estimateStorageUsage();
+        const max = 5 * 1024 * 1024; // ~5MB typical localStorage limit
+        if (usage > max * 0.85) {
+            showToast('Warning: browser storage is nearly full. Export and clear old data soon.', 'warning');
+        }
         await saveUserData(state.taxYear, state.expenses);
     } catch (e) {
         showToast('Error saving data. Storage may be full.', 'error');
@@ -488,6 +530,10 @@ function populateEditForm(id) {
 
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+function isValidReceiptData(data) {
+    return typeof data === 'string' && data.startsWith('data:');
 }
 
 function findExpense(id) {
@@ -723,7 +769,7 @@ function renderTable() {
     elements.expenseTableBody.innerHTML = expenses.map((exp, index) => {
         const color = state.categoryColors[exp.category] || '#64748b';
         const iconClass = state.categoryIcons[exp.category] || 'fa-notes-medical';
-        const receiptHtml = exp.receiptData
+        const receiptHtml = exp.receiptData && isValidReceiptData(exp.receiptData)
             ? `<a href="${exp.receiptData}" target="_blank" class="receipt-icon" title="${escapeHtml(exp.receiptName || 'View receipt')}"><i class="fa-solid fa-file-image"></i></a>`
             : `<span class="receipt-missing"><i class="fa-regular fa-file"></i></span>`;
         const netAmount = exp.amount - (exp.insuranceCovered || 0);
@@ -743,10 +789,10 @@ function renderTable() {
                 <td class="amount text-right net-col">${formatCurrency(netAmount)}</td>
                 <td class="text-center">${receiptHtml}</td>
                 <td class="text-center">
-                    <button class="btn-icon" title="Edit" aria-label="Edit expense" onclick="populateEditForm('${exp.id}')">
+                    <button class="btn-icon action-edit" data-id="${escapeHtml(exp.id)}" title="Edit" aria-label="Edit expense">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
-                    <button class="btn-icon btn-delete" title="Delete" aria-label="Delete expense" onclick="showDeleteModal('${exp.id}')">
+                    <button class="btn-icon btn-delete action-delete" data-id="${escapeHtml(exp.id)}" title="Delete" aria-label="Delete expense">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </td>
@@ -804,6 +850,10 @@ async function handleImportFile(e) {
                 const insuranceCovered = typeof exp.insuranceCovered === 'number' ? exp.insuranceCovered : (exp.insuranceCovered ? parseFloat(exp.insuranceCovered) : 0);
                 if (isNaN(insuranceCovered) || insuranceCovered < 0 || insuranceCovered > amount) {
                     skipped.push({ row: '-', reason: 'Invalid insurance covered', preview: exp.provider });
+                    continue;
+                }
+                if (exp.receiptData && !isValidReceiptData(exp.receiptData)) {
+                    skipped.push({ row: '-', reason: 'Invalid receipt data URL', preview: exp.provider });
                     continue;
                 }
                 const validCategories = Object.keys(state.categoryColors);
@@ -1084,10 +1134,10 @@ function exportCSV() {
     }
 
     const headers = ['Date', 'Category', 'Provider', 'Description', 'Amount', 'Insurance Covered', 'Net Out of Pocket', 'Notes', 'Receipt'];
-    // Prevent CSV formula injection by prefixing with a tab character
+    // Prevent CSV formula injection by prefixing with a single quote (safe for Excel, Sheets, etc.)
     const sanitizeCsv = (val) => {
         const str = String(val);
-        if (/^[+=\-@\t\r]/.test(str)) return '\t' + str;
+        if (/^[+=\-@\t\r]/.test(str)) return "'" + str;
         return str;
     };
 
@@ -1226,7 +1276,7 @@ function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;');
 }
 
 // ========================================
@@ -1297,9 +1347,5 @@ if ('serviceWorker' in navigator) {
 // ========================================
 // Start
 // ========================================
-
-// Expose functions needed by inline onclick handlers
-window.populateEditForm = populateEditForm;
-window.showDeleteModal = showDeleteModal;
 
 init();
