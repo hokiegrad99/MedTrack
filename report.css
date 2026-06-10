@@ -351,12 +351,45 @@ body.dark-mode .report-footer p {
     color: #94a3b8;
 }
 
-body.dark-mode .report-footer p {
-    color: #94a3b8;
-}
-
 .report-note {
     font-style: italic;
+}
+
+.report-footer .report-warning {
+    font-size: 0.8125rem;
+    color: var(--danger, #dc2626);
+    font-weight: 600;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--danger-subtle, #fef2f2);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+body.dark-mode .report-footer .report-warning {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #f87171;
+}
+
+.report-footer .report-warning i {
+    font-size: 1rem;
+}
+
+.last-export-time {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--report-muted, #94a3b8);
+    margin-left: 4px;
+}
+
+body.dark-mode .last-export-time {
+    color: #94a3b8;
 }
 
 /* Dark mode toggle in report */

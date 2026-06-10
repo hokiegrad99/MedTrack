@@ -75,6 +75,8 @@ async function initReport() {
     renderReport(expenses, year);
     initDarkMode();
     renderUserBadge();
+    startBackupReminder();
+    renderLastExport();
 }
 
 function initDarkMode() {
@@ -134,6 +136,30 @@ function renderReport(expenses, year) {
     renderItemizedList(sorted, netTotal);
 }
 
+function renderLastExport() {
+    const el = document.getElementById('lastExportTime');
+    if (!el) return;
+    const ts = localStorage.getItem('medtrack_lastExport');
+    if (!ts) {
+        el.textContent = ' — Never exported';
+        return;
+    }
+    const parsed = parseInt(ts, 10);
+    if (isNaN(parsed)) {
+        el.textContent = ' — Never exported';
+        return;
+    }
+    const date = new Date(parsed);
+    const formatted = date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+    el.textContent = ` — Last exported: ${formatted}`;
+}
+
 function renderCategoryBreakdown(expenses, total) {
     const tbody = document.getElementById('reportCategoryBody');
     const totalEl = document.getElementById('reportCategoryTotal');
@@ -170,6 +196,35 @@ function renderCategoryBreakdown(expenses, total) {
     }).join('');
 
     totalEl.textContent = formatCurrency(total);
+}
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    const icon = type === 'success' ? 'fa-circle-check' : type === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-exclamation';
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i> ${escapeHtml(message)}`;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 400);
+    }, 3000);
+}
+
+function startBackupReminder() {
+    const initialDelay = 5 * 60 * 1000; // 5 minutes
+    const interval = 30 * 60 * 1000; // 30 minutes
+
+    setTimeout(() => {
+        showToast('Remember to export your data for backup', 'warning');
+        setInterval(() => {
+            showToast('Remember to export your data for backup', 'warning');
+        }, interval);
+    }, initialDelay);
 }
 
 function renderItemizedList(expenses, netTotal) {

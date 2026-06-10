@@ -12,6 +12,15 @@
 </head>
 <body>
     <div class="app-container">
+        <!-- Overdue Export Banner -->
+        <div class="export-banner hidden" id="exportBanner" aria-live="polite" aria-label="Export warning">
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            <span>You haven't exported your data in over 7 days. <button type="button" class="btn-text" id="exportNowBtn">Export now</button></span>
+            <button type="button" class="btn-icon banner-close" id="dismissBannerBtn" aria-label="Dismiss banner">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
         <!-- Header -->
         <header class="app-header">
             <div class="header-brand">
@@ -242,7 +251,7 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>Data is stored locally in your browser. Export regularly for backup.</p>
+            <p><i class="fa-solid fa-triangle-exclamation"></i> <strong>Warning:</strong> All data is stored only in your browser. Clearing cookies or cache will permanently delete all records. Export your data regularly to avoid losing it.<span id="lastExportTime" class="last-export-time"></span></p>
         </footer>
     </div>
 

@@ -105,6 +105,9 @@ async function init() {
     await loadData();
     renderAll();
     renderUserBadge();
+    startBackupReminder();
+    renderLastExport();
+    checkExportOverdue();
 }
 
 function initDarkMode() {
@@ -1029,6 +1032,38 @@ function exportCSV() {
     URL.revokeObjectURL(url);
 
     showToast('CSV exported successfully', 'success');
+    saveExportTimestamp();
+}
+
+function saveExportTimestamp() {
+    localStorage.setItem('medtrack_lastExport', Date.now().toString());
+    renderLastExport();
+    const banner = document.getElementById('exportBanner');
+    if (banner) banner.classList.add('hidden');
+}
+
+function renderLastExport() {
+    const el = document.getElementById('lastExportTime');
+    if (!el) return;
+    const ts = localStorage.getItem('medtrack_lastExport');
+    if (!ts) {
+        el.textContent = ' — Never exported';
+        return;
+    }
+    const parsed = parseInt(ts, 10);
+    if (isNaN(parsed)) {
+        el.textContent = ' — Never exported';
+        return;
+    }
+    const date = new Date(parsed);
+    const formatted = date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+    el.textContent = ` — Last exported: ${formatted}`;
 }
 
 // ========================================
@@ -1038,7 +1073,7 @@ function exportCSV() {
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
+    const icon = type === 'success' ? 'fa-circle-check' : type === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-exclamation';
     toast.innerHTML = `<i class="fa-solid ${icon}"></i> ${escapeHtml(message)}`;
 
     elements.toastContainer.appendChild(toast);
@@ -1078,6 +1113,59 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// ========================================
+// Export Overdue Banner
+// ========================================
+
+function checkExportOverdue() {
+    const banner = document.getElementById('exportBanner');
+    const exportNowBtn = document.getElementById('exportNowBtn');
+    const dismissBtn = document.getElementById('dismissBannerBtn');
+    if (!banner) return;
+
+    // If already dismissed this session, don't show again
+    if (sessionStorage.getItem('medtrack_bannerDismissed') === 'true') {
+        return;
+    }
+
+    const ts = localStorage.getItem('medtrack_lastExport');
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const showBanner = !ts || isNaN(parseInt(ts, 10)) || parseInt(ts, 10) < sevenDaysAgo;
+
+    if (showBanner) {
+        banner.classList.remove('hidden');
+        if (exportNowBtn && !exportNowBtn.dataset.listenerAdded) {
+            exportNowBtn.addEventListener('click', () => {
+                exportCSV();
+            });
+            exportNowBtn.dataset.listenerAdded = 'true';
+        }
+        if (dismissBtn && !dismissBtn.dataset.listenerAdded) {
+            dismissBtn.addEventListener('click', () => {
+                banner.classList.add('hidden');
+                sessionStorage.setItem('medtrack_bannerDismissed', 'true');
+            });
+            dismissBtn.dataset.listenerAdded = 'true';
+        }
+    }
+}
+
+// ========================================
+// Backup Reminder
+// ========================================
+
+function startBackupReminder() {
+    const initialDelay = 5 * 60 * 1000; // 5 minutes
+    const interval = 30 * 60 * 1000; // 30 minutes
+
+    setTimeout(() => {
+        showToast('Remember to export your data for backup', 'warning');
+        setInterval(() => {
+            showToast('Remember to export your data for backup', 'warning');
+        }, interval);
+    }, initialDelay);
 }
 
 // ========================================

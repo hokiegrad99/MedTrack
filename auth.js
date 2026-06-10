@@ -171,6 +171,7 @@ function logout() {
     currentUser = null;
     currentPassword = null;
     localStorage.removeItem('medtrack_current_user');
+    try { localStorage.removeItem('medtrack_current_password'); } catch (e) {}
     location.reload();
 }
 
@@ -186,6 +187,21 @@ function initAuth() {
             return;
         }
         const savedUser = localStorage.getItem('medtrack_current_user');
+        const savedPassword = (() => { try { return localStorage.getItem('medtrack_current_password'); } catch (e) { return null; } })();
+
+        if (savedUser && savedPassword && hasUser(savedUser)) {
+            const hash = getVerificationHash(savedUser);
+            verifyPassword(savedPassword, hash).then(valid => {
+                if (valid) {
+                    onLoginSuccess(savedUser, savedPassword);
+                } else {
+                    try { localStorage.removeItem('medtrack_current_password'); } catch (e) {}
+                    renderAuthOverlay(savedUser);
+                }
+            });
+            return;
+        }
+
         renderAuthOverlay(savedUser);
     });
 }
@@ -232,7 +248,12 @@ function renderAuthOverlay(savedUser, unsupported = false) {
                 <form id="authWelcomeForm" class="auth-form">
                     <div class="auth-form-group">
                         <label for="authWelcomePass">Password</label>
-                        <input type="password" id="authWelcomePass" class="auth-input" placeholder="Enter your password" required autofocus>
+                        <div class="auth-input-wrap">
+                            <input type="password" id="authWelcomePass" class="auth-input" placeholder="Enter your password" required autofocus>
+                            <button type="button" class="auth-toggle-pass" data-target="authWelcomePass" aria-label="Show password">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
                     <button type="submit" class="auth-btn auth-btn-primary">Sign In</button>
                 </form>
@@ -254,7 +275,12 @@ function renderAuthOverlay(savedUser, unsupported = false) {
                 </div>
                 <div class="auth-form-group">
                     <label for="authLoginPass">Password</label>
-                    <input type="password" id="authLoginPass" class="auth-input" placeholder="Enter your password" required>
+                    <div class="auth-input-wrap">
+                        <input type="password" id="authLoginPass" class="auth-input" placeholder="Enter your password" required>
+                        <button type="button" class="auth-toggle-pass" data-target="authLoginPass" aria-label="Show password">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="auth-btn auth-btn-primary">Sign In</button>
             </form>
@@ -266,11 +292,21 @@ function renderAuthOverlay(savedUser, unsupported = false) {
                 </div>
                 <div class="auth-form-group">
                     <label for="authSignupPass">Password</label>
-                    <input type="password" id="authSignupPass" class="auth-input" placeholder="Choose a password" required>
+                    <div class="auth-input-wrap">
+                        <input type="password" id="authSignupPass" class="auth-input" placeholder="Choose a password" required>
+                        <button type="button" class="auth-toggle-pass" data-target="authSignupPass" aria-label="Show password">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="auth-form-group">
                     <label for="authSignupConfirm">Confirm Password</label>
-                    <input type="password" id="authSignupConfirm" class="auth-input" placeholder="Confirm password" required>
+                    <div class="auth-input-wrap">
+                        <input type="password" id="authSignupConfirm" class="auth-input" placeholder="Confirm password" required>
+                        <button type="button" class="auth-toggle-pass" data-target="authSignupConfirm" aria-label="Show password">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="auth-btn auth-btn-primary">Create Account</button>
             </form>
@@ -314,6 +350,18 @@ function renderAuthOverlay(savedUser, unsupported = false) {
                 loginForm.classList.add('hidden');
                 signupForm.classList.remove('hidden');
             }
+            // Reset all password inputs to hidden state when switching tabs
+            overlay.querySelectorAll('input[type="text"]').forEach(input => {
+                if (input.id && (input.id.includes('Pass') || input.id.includes('Confirm'))) {
+                    input.type = 'password';
+                }
+            });
+            overlay.querySelectorAll('.auth-toggle-pass').forEach(btn => {
+                const icon = btn.querySelector('i');
+                icon.className = 'fa-solid fa-eye';
+                btn.setAttribute('aria-label', 'Show password');
+                btn.setAttribute('aria-pressed', 'false');
+            });
             clearAuthError();
         });
     });
@@ -325,6 +373,21 @@ function renderAuthOverlay(savedUser, unsupported = false) {
     if (signupForm) {
         signupForm.addEventListener('submit', handleSignup);
     }
+
+    // Show password toggles
+    overlay.querySelectorAll('.auth-toggle-pass').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            const input = document.getElementById(targetId);
+            if (!input) return;
+            const isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            const icon = btn.querySelector('i');
+            icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+            btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+            btn.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+        });
+    });
 
     // Welcome back handlers
     const welcomeForm = document.getElementById('authWelcomeForm');
@@ -461,6 +524,7 @@ function onLoginSuccess(username, password) {
     currentUser = username;
     currentPassword = password;
     localStorage.setItem('medtrack_current_user', username);
+    try { localStorage.setItem('medtrack_current_password', password); } catch (e) {}
     hideAuthOverlay();
     if (authResolve) {
         authResolve();

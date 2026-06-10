@@ -1295,20 +1295,114 @@ body.dark-mode .import-preview .skip-row td {
     color: var(--danger);
 }
 
+.toast.toast-warning {
+    border-left-color: var(--warning);
+}
+
+.toast.toast-warning i {
+    color: var(--warning);
+}
+
 /* ========================================
    Footer
    ======================================== */
 
 .app-footer {
     margin-top: 32px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border-color);
+    padding: 16px 24px;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-subtle);
     text-align: center;
 }
 
 .app-footer p {
+    font-size: 0.875rem;
+    color: var(--danger);
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.app-footer p i {
+    font-size: 1rem;
+}
+
+body.dark-mode .app-footer {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+body.dark-mode .app-footer p {
+    color: #f87171;
+}
+
+.last-export-time {
     font-size: 0.8125rem;
+    font-weight: 500;
     color: var(--text-muted);
+    margin-left: 4px;
+}
+
+body.dark-mode .last-export-time {
+    color: #94a3b8;
+}
+
+/* ========================================
+   Export Overdue Banner
+   ======================================== */
+
+.export-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 24px;
+    background: var(--warning-subtle);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #b45309;
+}
+
+body.dark-mode .export-banner {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fbbf24;
+}
+
+.export-banner i {
+    font-size: 1rem;
+}
+
+.export-banner .btn-text {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.export-banner .btn-text:hover {
+    text-decoration: underline;
+}
+
+.banner-close {
+    margin-left: auto;
+    color: inherit;
+}
+
+.banner-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+body.dark-mode .banner-close:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
 
 /* ========================================
@@ -1457,6 +1551,44 @@ body.dark-mode .auth-tab.active {
 
 .auth-input::placeholder {
     color: var(--text-muted);
+}
+
+.auth-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.auth-input-wrap .auth-input {
+    padding-right: 44px;
+}
+
+.auth-toggle-pass {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    font-size: 0.875rem;
+}
+
+.auth-toggle-pass:hover {
+    background: var(--gray-100);
+    color: var(--text-secondary);
+}
+
+body.dark-mode .auth-toggle-pass:hover {
+    background: var(--gray-700);
 }
 
 .auth-btn {
