@@ -55,29 +55,26 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
-function getStorageKey(year) {
-    return `medtrack_expenses_${year}`;
-}
-
-function loadExpenses(year) {
+async function loadExpenses(year) {
     try {
-        const stored = localStorage.getItem(getStorageKey(year));
-        return stored ? JSON.parse(stored) : [];
+        return await loadUserData(year);
     } catch (e) {
         return [];
     }
 }
 
-function initReport() {
+async function initReport() {
+    await initAuth();
     const params = new URLSearchParams(window.location.search);
     const year = parseInt(params.get('year')) || new Date().getFullYear();
 
     document.getElementById('reportYear').textContent = year;
     document.title = `Medical Expense Tax Summary — ${year}`;
 
-    const expenses = loadExpenses(year);
+    const expenses = await loadExpenses(year);
     renderReport(expenses, year);
     initDarkMode();
+    renderUserBadge();
 }
 
 function initDarkMode() {

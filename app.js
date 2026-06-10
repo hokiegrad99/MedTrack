@@ -96,13 +96,15 @@ const elements = {
 // Initialization
 // ========================================
 
-function init() {
+async function init() {
     populateTaxYearOptions();
-    loadData();
+    await initAuth();
     setupEventListeners();
     setDefaultDate();
     initDarkMode();
+    await loadData();
     renderAll();
+    renderUserBadge();
 }
 
 function initDarkMode() {
@@ -141,9 +143,9 @@ function setDefaultDate() {
 let searchDebounceTimer = null;
 
 function setupEventListeners() {
-    elements.taxYear.addEventListener('change', (e) => {
+    elements.taxYear.addEventListener('change', async (e) => {
         state.taxYear = parseInt(e.target.value);
-        loadData();
+        await loadData();
         renderAll();
     });
 
@@ -175,7 +177,7 @@ function setupEventListeners() {
     });
 
     elements.cancelDeleteBtn.addEventListener('click', hideDeleteModal);
-    elements.confirmDeleteBtn.addEventListener('click', confirmDelete);
+    elements.confirmDeleteBtn.addEventListener('click', () => confirmDelete().catch(console.error));
 
     // Close modal on overlay click
     elements.deleteModal.addEventListener('click', (e) => {
@@ -215,7 +217,7 @@ function setupEventListeners() {
     elements.importBtn.addEventListener('click', () => elements.importFile.click());
     elements.importFile.addEventListener('change', handleImportFile);
     elements.cancelImportBtn.addEventListener('click', hideImportModal);
-    elements.confirmImportBtn.addEventListener('click', confirmImport);
+    elements.confirmImportBtn.addEventListener('click', () => confirmImport().catch(console.error));
     elements.importModal.addEventListener('click', (e) => {
         if (e.target === elements.importModal) hideImportModal();
     });
@@ -239,23 +241,18 @@ function setupEventListeners() {
 // Data Persistence
 // ========================================
 
-function getStorageKey() {
-    return `medtrack_expenses_${state.taxYear}`;
-}
-
-function loadData() {
+async function loadData() {
     try {
-        const stored = localStorage.getItem(getStorageKey());
-        state.expenses = stored ? JSON.parse(stored) : [];
+        state.expenses = await loadUserData(state.taxYear);
     } catch (e) {
         state.expenses = [];
         showToast('Error loading saved data', 'error');
     }
 }
 
-function saveData() {
+async function saveData() {
     try {
-        localStorage.setItem(getStorageKey(), JSON.stringify(state.expenses));
+        await saveUserData(state.taxYear, state.expenses);
     } catch (e) {
         showToast('Error saving data. Storage may be full.', 'error');
     }
@@ -348,7 +345,7 @@ async function handleFormSubmit(e) {
         clearForm();
     }
 
-    saveData();
+    await saveData();
     renderAll();
 }
 
@@ -483,13 +480,13 @@ function hideDeleteModal() {
     }, 200);
 }
 
-function confirmDelete() {
+async function confirmDelete() {
     if (!state.deleteTargetId) return;
 
     const index = state.expenses.findIndex(exp => exp.id === state.deleteTargetId);
     if (index !== -1) {
         state.expenses.splice(index, 1);
-        saveData();
+        await saveData();
         showToast('Expense deleted', 'success');
         renderAll();
     }
@@ -974,14 +971,14 @@ function hideImportModal() {
     }, 200);
 }
 
-function confirmImport() {
+async function confirmImport() {
     if (state.pendingImports.length === 0) {
         hideImportModal();
         return;
     }
 
     state.expenses.push(...state.pendingImports);
-    saveData();
+    await saveData();
     showToast(`${state.pendingImports.length} expense(s) imported successfully`, 'success');
     hideImportModal();
     renderAll();
