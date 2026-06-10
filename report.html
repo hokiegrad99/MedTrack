@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Expense Tax Summary — MedTrack Pro</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="report.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="report-page" id="reportBody">
+    <div class="report-actions">
+        <button class="dark-mode-toggle" id="reportDarkModeToggle" aria-label="Toggle dark mode">
+            <i class="fa-solid fa-moon"></i>
+            <i class="fa-solid fa-sun"></i>
+            <span>Dark Mode</span>
+        </button>
+        <div class="report-actions-right">
+            <a href="index.html" class="btn btn-outline">
+                <i class="fa-solid fa-arrow-left"></i> Back to Tracker
+            </a>
+            <button class="btn btn-primary" id="printBtn" onclick="window.print()">
+                <i class="fa-solid fa-print"></i> Print / Save as PDF
+            </button>
+        </div>
+    </div>
+
+    <div class="report-sheet">
+        <!-- Report Header -->
+        <header class="report-header">
+            <div class="report-logo">
+                <i class="fa-solid fa-heart-pulse"></i>
+                <span>MedTrack Pro</span>
+            </div>
+            <div class="report-title">
+                <h1>Medical Expense Summary Report</h1>
+                <p class="report-year">Tax Year <span id="reportYear">—</span></p>
+            </div>
+        </header>
+
+        <!-- Taxpayer Info -->
+        <section class="report-section taxpayer-section">
+            <h2 class="report-section-title">Taxpayer Information</h2>
+            <div class="taxpayer-grid">
+                <div class="taxpayer-field">
+                    <label>Taxpayer Name</label>
+                    <div class="field-line"></div>
+                </div>
+                <div class="taxpayer-field">
+                    <label>Social Security Number / TIN</label>
+                    <div class="field-line"></div>
+                </div>
+                <div class="taxpayer-field">
+                    <label>Address</label>
+                    <div class="field-line"></div>
+                </div>
+                <div class="taxpayer-field">
+                    <label>Phone Number</label>
+                    <div class="field-line"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Summary -->
+        <section class="report-section summary-section">
+            <h2 class="report-section-title">Expense Summary</h2>
+            <div class="report-summary-grid">
+                <div class="report-summary-item">
+                    <span class="report-summary-label">Total Medical Expenses</span>
+                    <span class="report-summary-value" id="reportTotal">$0.00</span>
+                </div>
+                <div class="report-summary-item">
+                    <span class="report-summary-label">Insurance Covered</span>
+                    <span class="report-summary-value" id="reportInsuranceCovered">$0.00</span>
+                </div>
+                <div class="report-summary-item">
+                    <span class="report-summary-label">Net Out-of-Pocket</span>
+                    <span class="report-summary-value highlight-net" id="reportNet">$0.00</span>
+                </div>
+                <div class="report-summary-item">
+                    <span class="report-summary-label">Total Number of Entries</span>
+                    <span class="report-summary-value" id="reportEntries">0</span>
+                </div>
+                <div class="report-summary-item">
+                    <span class="report-summary-label">Date Range</span>
+                    <span class="report-summary-value" id="reportDateRange">—</span>
+                </div>
+                <div class="report-summary-item">
+                    <span class="report-summary-label">Largest Single Expense</span>
+                    <span class="report-summary-value" id="reportLargest">$0.00</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Category Breakdown -->
+        <section class="report-section">
+            <h2 class="report-section-title">Category Breakdown</h2>
+            <table class="report-table category-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th class="text-right">Amount</th>
+                        <th class="text-right">% of Total</th>
+                    </tr>
+                </thead>
+                <tbody id="reportCategoryBody">
+                    <!-- Populated by JS -->
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td><strong>Total</strong></td>
+                        <td class="text-right"><strong id="reportCategoryTotal">$0.00</strong></td>
+                        <td class="text-right"><strong>100%</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </section>
+
+        <!-- Itemized Expenses -->
+        <section class="report-section">
+            <h2 class="report-section-title">Itemized Expense List</h2>
+            <table class="report-table itemized-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Provider</th>
+                        <th>Description</th>
+                        <th class="text-right">Amount</th>
+                        <th class="text-right">Insurance</th>
+                        <th class="text-right">Net</th>
+                    </tr>
+                </thead>
+                <tbody id="reportItemizedBody">
+                    <!-- Populated by JS -->
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5"><strong>Total Medical Expenses</strong></td>
+                        <td class="text-right"><strong id="reportItemizedTotal">$0.00</strong></td>
+                        <td class="text-right"><strong id="reportInsuranceTotal">$0.00</strong></td>
+                        <td class="text-right"><strong id="reportNetTotal">$0.00</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </section>
+
+        <!-- Signature -->
+        <section class="report-section signature-section">
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <label>Taxpayer Signature & Date</label>
+            </div>
+            <p class="report-disclaimer">
+                I declare that the above-listed medical expenses were incurred during the stated tax year and that all amounts are accurate to the best of my knowledge. Receipts and supporting documentation are retained on file.
+            </p>
+        </section>
+
+        <!-- Report Footer -->
+        <footer class="report-footer">
+            <p>Generated by MedTrack Pro on <span id="reportGenerated">—</span></p>
+            <p class="report-note">This report is for informational and tax-preparation purposes. Please consult a qualified tax professional before filing.</p>
+        </footer>
+    </div>
+
+    <script src="report.js"></script>
+</body>
+</html>

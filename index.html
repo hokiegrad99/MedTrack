@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedTrack Pro — Medical Expense Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-brand">
+                <div class="logo">
+                    <i class="fa-solid fa-heart-pulse"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>MedTrack Pro</h1>
+                    <p>Medical Expense Tracker</p>
+                </div>
+            </div>
+            <div class="header-controls">
+                <button class="dark-mode-toggle" id="darkModeToggle" aria-label="Toggle dark mode">
+                    <i class="fa-solid fa-moon"></i>
+                    <i class="fa-solid fa-sun"></i>
+                    <span>Dark Mode</span>
+                </button>
+                <div class="tax-year-selector">
+                    <label for="taxYear">Tax Year</label>
+                    <select id="taxYear"></select>
+                </div>
+                <button class="btn btn-outline" id="importBtn" aria-label="Import CSV">
+                    <i class="fa-solid fa-upload"></i> Import
+                </button>
+                <input type="file" id="importFile" accept=".csv" style="display:none">
+                <a href="report.html" class="btn btn-outline" id="reportBtn" aria-label="Open tax summary report" onclick="event.preventDefault(); window.open('report.html?year=' + document.getElementById('taxYear').value, '_blank');">
+                    <i class="fa-solid fa-file-lines"></i> Tax Report
+                </a>
+                <button class="btn btn-outline" id="exportBtn">
+                    <i class="fa-solid fa-download"></i> Export CSV
+                </button>
+            </div>
+        </header>
+
+        <!-- Summary Cards -->
+        <section class="summary-cards">
+            <div class="card summary-card">
+                <div class="summary-icon total">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+                <div class="summary-info">
+                    <span class="summary-label">Total Expenses</span>
+                    <span class="summary-value" id="totalExpenses">$0.00</span>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="summary-icon net">
+                    <i class="fa-solid fa-wallet"></i>
+                </div>
+                <div class="summary-info">
+                    <span class="summary-label">Net Out-of-Pocket</span>
+                    <span class="summary-value" id="netExpenses">$0.00</span>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="summary-icon insurance">
+                    <i class="fa-solid fa-shield-heart"></i>
+                </div>
+                <div class="summary-info">
+                    <span class="summary-label">Insurance Covered</span>
+                    <span class="summary-value" id="totalInsuranceCovered">$0.00</span>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="summary-icon count">
+                    <i class="fa-solid fa-list-ol"></i>
+                </div>
+                <div class="summary-info">
+                    <span class="summary-label">Total Entries</span>
+                    <span class="summary-value" id="totalEntries">0</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left: Form -->
+            <section class="form-section card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-plus-circle"></i> Add Expense</h2>                        <button type="button" class="btn-text" id="clearFormBtn" aria-label="Clear form">Clear</button>
+                </div>
+                <form id="expenseForm" class="expense-form">
+                    <input type="hidden" id="expenseId">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="date">Date <span class="required">*</span></label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="category">Category <span class="required">*</span></label>
+                            <select id="category" required>
+                                <option value="">Select category</option>
+                                <option value="Doctor Visit">Doctor Visit</option>
+                                <option value="Prescription">Prescription</option>
+                                <option value="Hospital">Hospital</option>
+                                <option value="Dental">Dental</option>
+                                <option value="Vision">Vision</option>
+                                <option value="Mental Health">Mental Health</option>
+                                <option value="Physical Therapy">Physical Therapy</option>
+                                <option value="Lab / Imaging">Lab / Imaging</option>
+                                <option value="Insurance Premium">Insurance Premium</option>
+                                <option value="Medical Supplies">Medical Supplies</option>
+                                <option value="Transportation">Transportation</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="provider">Provider / Pharmacy <span class="required">*</span></label>
+                            <input type="text" id="provider" placeholder="e.g. Dr. Smith, CVS Pharmacy" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="amount">Amount ($) <span class="required">*</span></label>
+                            <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="insuranceCovered">Insurance Covered ($)</label>
+                            <input type="number" id="insuranceCovered" step="0.01" min="0" placeholder="0.00" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="description">Description</label>
+                            <input type="text" id="description" placeholder="Brief description of the expense">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="receipt">Receipt / Document</label>
+                        <div class="file-upload">
+                            <input type="file" id="receipt" accept=".pdf,.jpg,.jpeg,.png,.gif">
+                            <label for="receipt" class="file-upload-label">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                <span id="fileName">Click to upload receipt</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Notes</label>
+                        <textarea id="notes" rows="3" placeholder="Additional notes (optional)"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="fa-solid fa-check"></i> Save Expense
+                        </button>
+                        <button type="button" class="btn btn-secondary hidden" id="cancelEditBtn">
+                            <i class="fa-solid fa-xmark"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Right: List & Breakdown -->
+            <section class="list-section">
+                <!-- Category Breakdown -->
+                <div class="card breakdown-card">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-chart-pie"></i> Category Breakdown</h2>
+                    </div>
+                    <div class="breakdown-list" id="breakdownList">
+                        <div class="empty-breakdown">Add expenses to see breakdown</div>
+                    </div>
+                </div>
+
+                <!-- Expenses Table -->
+                <div class="card table-card">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-table-list"></i> Expense History</h2>
+                        <div class="table-controls">
+                            <div class="search-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="searchInput" placeholder="Search expenses...">
+                            </div>
+                            <select id="filterCategory">
+                                <option value="">All Categories</option>
+                                <option value="Doctor Visit">Doctor Visit</option>
+                                <option value="Prescription">Prescription</option>
+                                <option value="Hospital">Hospital</option>
+                                <option value="Dental">Dental</option>
+                                <option value="Vision">Vision</option>
+                                <option value="Mental Health">Mental Health</option>
+                                <option value="Physical Therapy">Physical Therapy</option>
+                                <option value="Lab / Imaging">Lab / Imaging</option>
+                                <option value="Insurance Premium">Insurance Premium</option>
+                                <option value="Medical Supplies">Medical Supplies</option>
+                                <option value="Transportation">Transportation</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="expense-table" id="expenseTable">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" data-sort="date">Date <i class="fa-solid fa-sort"></i></th>
+                                    <th class="sortable" data-sort="category">Category <i class="fa-solid fa-sort"></i></th>
+                                    <th class="sortable" data-sort="provider">Provider <i class="fa-solid fa-sort"></i></th>
+                                    <th class="sortable" data-sort="description">Description <i class="fa-solid fa-sort"></i></th>
+                                    <th class="sortable text-right" data-sort="amount">Amount <i class="fa-solid fa-sort"></i></th>
+                                    <th class="sortable text-right" data-sort="insuranceCovered">Insurance <i class="fa-solid fa-sort"></i></th>
+                                    <th class="sortable text-right" data-sort="outOfPocket">Net <i class="fa-solid fa-sort"></i></th>
+                                    <th class="text-center">Receipt</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenseTableBody">
+                                <tr class="empty-row">
+                                    <td colspan="9">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-clipboard-list"></i>
+                                            <p>No expenses recorded yet</p>
+                                            <span>Use the form to add your first medical expense</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Data is stored locally in your browser. Export regularly for backup.</p>
+        </footer>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Import Results Modal -->
+    <div class="modal-overlay hidden" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <h3 id="importModalTitle"><i class="fa-solid fa-file-csv"></i> Import Results</h3>
+            </div>
+            <div class="modal-body" id="importModalBody">
+                <!-- Populated by JS -->
+            </div>
+            <div class="modal-footer" id="importModalFooter">
+                <button class="btn btn-secondary" id="cancelImportBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmImportBtn">Import <span id="importCount">0</span> Expenses</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay hidden" id="deleteModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="deleteModalTitle"><i class="fa-solid fa-triangle-exclamation"></i> Confirm Deletion</h3>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this expense? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+                <button class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
