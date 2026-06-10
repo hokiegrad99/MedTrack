@@ -53,6 +53,7 @@ const state = {
 const elements = {
     taxYear: document.getElementById('taxYear'),
     exportBtn: document.getElementById('exportBtn'),
+    exportJsonBtn: document.getElementById('exportJsonBtn'),
     totalExpenses: document.getElementById('totalExpenses'),
     netExpenses: document.getElementById('netExpenses'),
     totalEntries: document.getElementById('totalEntries'),
@@ -161,6 +162,7 @@ function setupEventListeners() {
     elements.cancelEditBtn.addEventListener('click', cancelEdit);
 
     elements.exportBtn.addEventListener('click', exportCSV);
+    elements.exportJsonBtn.addEventListener('click', exportJSON);
 
     elements.searchInput.addEventListener('input', (e) => {
         clearTimeout(searchDebounceTimer);
@@ -314,7 +316,7 @@ async function handleFormSubmit(e) {
         }
         expense.receiptName = file.name;
         try {
-            expense.receiptData = await readFileAsBase64(file);
+            expense.receiptData = await compressImage(file);
         } catch (err) {
             showToast('Error reading receipt file', 'error');
             return;
@@ -358,6 +360,39 @@ function readFileAsBase64(file) {
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(file);
+    });
+}
+
+function compressImage(file, maxWidth = 800, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+        if (!file.type.startsWith('image/')) {
+            // Non-image files: read as-is
+            readFileAsBase64(file).then(resolve).catch(reject);
+            return;
+        }
+
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let { width, height } = img;
+            if (width > maxWidth) {
+                height = Math.round(height * (maxWidth / width));
+                width = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', quality);
+            resolve(compressed);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Failed to load image for compression'));
+        };
+        img.src = url;
     });
 }
 
@@ -739,95 +774,146 @@ async function handleImportFile(e) {
         return;
     }
 
-    const rows = parseCSV(text);
-    if (rows.length < 2) {
-        showToast('CSV file appears empty or invalid', 'error');
-        return;
-    }
+    const isJson = file.name.toLowerCase().endsWith('.json');
+    let parsed = [];
+    let skipped = [];
+    let duplicates = [];
 
-    const headers = rows[0].map(h => h.trim().toLowerCase());
-    const colMap = {
-        date: headers.indexOf('date'),
-        category: headers.indexOf('category'),
-        provider: headers.indexOf('provider'),
-        description: headers.indexOf('description'),
-        amount: headers.indexOf('amount'),
-        insuranceCovered: headers.indexOf('insurance covered') !== -1 ? headers.indexOf('insurance covered') : headers.indexOf('insurance_covered') !== -1 ? headers.indexOf('insurance_covered') : headers.indexOf('insurancecovered'),
-        notes: headers.indexOf('notes'),
-        receipt: headers.indexOf('receipt')
-    };
-
-    if (colMap.date === -1 || colMap.provider === -1 || colMap.amount === -1) {
-        showToast('CSV missing required columns: Date, Provider, Amount', 'error');
-        return;
-    }
-
-    const validCategories = Object.keys(state.categoryColors);
-    const parsed = [];
-    const skipped = [];
-
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        if (row.length === 1 && row[0].trim() === '') continue; // skip empty rows
-
-        const date = colMap.date !== -1 ? row[colMap.date]?.trim() : '';
-        const provider = colMap.provider !== -1 ? row[colMap.provider]?.trim() : '';
-        const amountStr = colMap.amount !== -1 ? row[colMap.amount]?.trim() : '';
-        const category = colMap.category !== -1 ? row[colMap.category]?.trim() : '';
-        const description = colMap.description !== -1 ? row[colMap.description]?.trim() : '';
-        const insuranceStr = colMap.insuranceCovered !== -1 ? row[colMap.insuranceCovered]?.trim() : '';
-        const notes = colMap.notes !== -1 ? row[colMap.notes]?.trim() : '';
-        const receiptName = colMap.receipt !== -1 ? row[colMap.receipt]?.trim() : '';
-
-        // Validate
-        if (!date || !provider || !amountStr) {
-            skipped.push({ row: i + 1, reason: 'Missing required field(s)', preview: provider || '(empty)' });
-            continue;
+    if (isJson) {
+        try {
+            const payload = JSON.parse(text);
+            const expenses = payload.expenses || payload;
+            if (!Array.isArray(expenses)) {
+                showToast('JSON file does not contain an expenses array', 'error');
+                return;
+            }
+            for (const exp of expenses) {
+                const amount = typeof exp.amount === 'number' ? exp.amount : parseFloat(exp.amount);
+                if (!exp.date || !exp.provider || isNaN(amount)) {
+                    skipped.push({ row: '-', reason: 'Missing required field(s)', preview: exp.provider || '(empty)' });
+                    continue;
+                }
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(exp.date)) {
+                    skipped.push({ row: '-', reason: `Invalid date: ${exp.date}`, preview: exp.provider });
+                    continue;
+                }
+                if (amount < 0) {
+                    skipped.push({ row: '-', reason: `Invalid amount: ${exp.amount}`, preview: exp.provider });
+                    continue;
+                }
+                const insuranceCovered = typeof exp.insuranceCovered === 'number' ? exp.insuranceCovered : (exp.insuranceCovered ? parseFloat(exp.insuranceCovered) : 0);
+                if (isNaN(insuranceCovered) || insuranceCovered < 0 || insuranceCovered > amount) {
+                    skipped.push({ row: '-', reason: 'Invalid insurance covered', preview: exp.provider });
+                    continue;
+                }
+                const validCategories = Object.keys(state.categoryColors);
+                const finalCategory = validCategories.includes(exp.category) ? exp.category : 'Other';
+                parsed.push({
+                    id: exp.id || generateId(),
+                    date: exp.date,
+                    category: finalCategory,
+                    provider: String(exp.provider),
+                    amount: exp.amount,
+                    insuranceCovered,
+                    description: exp.description || '',
+                    notes: exp.notes || '',
+                    receiptName: exp.receiptName || null,
+                    receiptData: exp.receiptData || null,
+                    createdAt: exp.createdAt || new Date().toISOString()
+                });
+            }
+        } catch (err) {
+            showToast('Invalid JSON file', 'error');
+            return;
+        }
+    } else {
+        const rows = parseCSV(text);
+        if (rows.length < 2) {
+            showToast('CSV file appears empty or invalid', 'error');
+            return;
         }
 
-        // Validate date format (YYYY-MM-DD)
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-            skipped.push({ row: i + 1, reason: `Invalid date: ${date}`, preview: provider });
-            continue;
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        const colMap = {
+            date: headers.indexOf('date'),
+            category: headers.indexOf('category'),
+            provider: headers.indexOf('provider'),
+            description: headers.indexOf('description'),
+            amount: headers.indexOf('amount'),
+            insuranceCovered: headers.indexOf('insurance covered') !== -1 ? headers.indexOf('insurance covered') : headers.indexOf('insurance_covered') !== -1 ? headers.indexOf('insurance_covered') : headers.indexOf('insurancecovered'),
+            notes: headers.indexOf('notes'),
+            receipt: headers.indexOf('receipt')
+        };
+
+        if (colMap.date === -1 || colMap.provider === -1 || colMap.amount === -1) {
+            showToast('CSV missing required columns: Date, Provider, Amount', 'error');
+            return;
         }
 
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount < 0) {
-            skipped.push({ row: i + 1, reason: `Invalid amount: ${amountStr}`, preview: provider });
-            continue;
-        }
+        const validCategories = Object.keys(state.categoryColors);
 
-        const insuranceCovered = insuranceStr ? parseFloat(insuranceStr) : 0;
-        if (isNaN(insuranceCovered) || insuranceCovered < 0) {
-            skipped.push({ row: i + 1, reason: `Invalid insurance covered: ${insuranceStr}`, preview: provider });
-            continue;
-        }
-        if (insuranceCovered > amount) {
-            skipped.push({ row: i + 1, reason: `Insurance exceeds amount`, preview: provider });
-            continue;
-        }
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (row.length === 1 && row[0].trim() === '') continue; // skip empty rows
 
-        // Use provided category or default to Other
-        const finalCategory = validCategories.includes(category) ? category : 'Other';
+            const date = colMap.date !== -1 ? row[colMap.date]?.trim() : '';
+            const provider = colMap.provider !== -1 ? row[colMap.provider]?.trim() : '';
+            const amountStr = colMap.amount !== -1 ? row[colMap.amount]?.trim() : '';
+            const category = colMap.category !== -1 ? row[colMap.category]?.trim() : '';
+            const description = colMap.description !== -1 ? row[colMap.description]?.trim() : '';
+            const insuranceStr = colMap.insuranceCovered !== -1 ? row[colMap.insuranceCovered]?.trim() : '';
+            const notes = colMap.notes !== -1 ? row[colMap.notes]?.trim() : '';
+            const receiptName = colMap.receipt !== -1 ? row[colMap.receipt]?.trim() : '';
 
-        parsed.push({
-            id: generateId(),
-            date,
-            category: finalCategory,
-            provider,
-            amount,
-            insuranceCovered,
-            description,
-            notes,
-            receiptName: receiptName || null,
-            receiptData: null,
-            createdAt: new Date().toISOString()
-        });
+            // Validate
+            if (!date || !provider || !amountStr) {
+                skipped.push({ row: i + 1, reason: 'Missing required field(s)', preview: provider || '(empty)' });
+                continue;
+            }
+
+            // Validate date format (YYYY-MM-DD)
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                skipped.push({ row: i + 1, reason: `Invalid date: ${date}`, preview: provider });
+                continue;
+            }
+
+            const amount = parseFloat(amountStr);
+            if (isNaN(amount) || amount < 0) {
+                skipped.push({ row: i + 1, reason: `Invalid amount: ${amountStr}`, preview: provider });
+                continue;
+            }
+
+            const insuranceCovered = insuranceStr ? parseFloat(insuranceStr) : 0;
+            if (isNaN(insuranceCovered) || insuranceCovered < 0) {
+                skipped.push({ row: i + 1, reason: `Invalid insurance covered: ${insuranceStr}`, preview: provider });
+                continue;
+            }
+            if (insuranceCovered > amount) {
+                skipped.push({ row: i + 1, reason: `Insurance exceeds amount`, preview: provider });
+                continue;
+            }
+
+            // Use provided category or default to Other
+            const finalCategory = validCategories.includes(category) ? category : 'Other';
+
+            parsed.push({
+                id: generateId(),
+                date,
+                category: finalCategory,
+                provider,
+                amount,
+                insuranceCovered,
+                description,
+                notes,
+                receiptName: receiptName || null,
+                receiptData: null,
+                createdAt: new Date().toISOString()
+            });
+        }
     }
 
     // Deduplicate against existing expenses
     const toImport = [];
-    const duplicates = [];
     for (const exp of parsed) {
         if (isDuplicateExpense(exp)) {
             duplicates.push(exp);
@@ -909,7 +995,7 @@ function showImportModal(toImport, skipped, duplicates) {
             <div class="import-stat warning"><i class="fa-solid fa-triangle-exclamation"></i> ${skipped.length} skipped</div>
             <div class="import-stat info"><i class="fa-solid fa-clone"></i> ${duplicates.length} duplicates</div>
         </div>
-        <p>Found <strong>${total}</strong> row(s) in the CSV file.</p>
+        <p>Found <strong>${total}</strong> row(s) in the file.</p>
         ${toImport.length > 0 ? `
         <div class="import-preview">
             <table>
@@ -1032,6 +1118,34 @@ function exportCSV() {
     URL.revokeObjectURL(url);
 
     showToast('CSV exported successfully', 'success');
+    saveExportTimestamp();
+}
+
+function exportJSON() {
+    if (state.expenses.length === 0) {
+        showToast('No expenses to export', 'error');
+        return;
+    }
+
+    const payload = {
+        version: 1,
+        app: 'MedTrack Pro',
+        exportedAt: new Date().toISOString(),
+        taxYear: state.taxYear,
+        expenses: state.expenses
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `medical-expenses-${state.taxYear}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast('JSON exported successfully', 'success');
     saveExportTimestamp();
 }
 
@@ -1166,6 +1280,18 @@ function startBackupReminder() {
             showToast('Remember to export your data for backup', 'warning');
         }, interval);
     }, initialDelay);
+}
+
+// ========================================
+// Service Worker Registration (PWA)
+// ========================================
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('SW registered:', reg.scope))
+            .catch(err => console.log('SW registration failed:', err));
+    });
 }
 
 // ========================================

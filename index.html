@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d9488">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <title>MedTrack Pro — Medical Expense Tracker</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,12 +48,15 @@
                 <button class="btn btn-outline" id="importBtn" aria-label="Import CSV">
                     <i class="fa-solid fa-upload"></i> Import
                 </button>
-                <input type="file" id="importFile" accept=".csv" style="display:none">
+                <input type="file" id="importFile" accept=".csv,.json" style="display:none">
                 <a href="report.html" class="btn btn-outline" id="reportBtn" aria-label="Open tax summary report" onclick="event.preventDefault(); window.open('report.html?year=' + document.getElementById('taxYear').value, '_blank');">
                     <i class="fa-solid fa-file-lines"></i> Tax Report
                 </a>
                 <button class="btn btn-outline" id="exportBtn">
                     <i class="fa-solid fa-download"></i> Export CSV
+                </button>
+                <button class="btn btn-outline" id="exportJsonBtn" aria-label="Export JSON">
+                    <i class="fa-solid fa-file-code"></i> Export JSON
                 </button>
                 <div class="user-badge hidden" id="userBadge">
                     <i class="fa-solid fa-user-shield"></i>
