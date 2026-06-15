@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com 'sha256-aqNNdDLnnrDOnTNdkJpYlAxKVJtLt9CtFLklmInuUAE=' 'unsafe-hashes'; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0d9488">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <title>Medical Expense Tax Summary — MedTrack Pro</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="report.css">
+    <link rel="stylesheet" href="styles.css?v=16">
+    <link rel="stylesheet" href="report.css?v=16">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -30,7 +31,7 @@
             <a href="index.html" class="btn btn-outline" id="backToTrackerBtn">
                 <i class="fa-solid fa-arrow-left"></i> Back to Tracker
             </a>
-            <button class="btn btn-primary" id="printBtn" onclick="window.print()">
+            <button class="btn btn-primary" id="printBtn">
                 <i class="fa-solid fa-print"></i> Print / Save as PDF
             </button>
         </div>
@@ -76,28 +77,28 @@
         <section class="report-section summary-section">
             <h2 class="report-section-title">Expense Summary</h2>
             <div class="report-summary-grid">
-                <div class="report-summary-item">
-                    <span class="report-summary-label">Total Medical Expenses</span>
+                <div class="report-summary-item report-summary-total">
+                    <span class="report-summary-label"><i class="fa-solid fa-receipt"></i> Total Medical Expenses</span>
                     <span class="report-summary-value" id="reportTotal">$0.00</span>
                 </div>
-                <div class="report-summary-item">
-                    <span class="report-summary-label">Insurance Covered</span>
+                <div class="report-summary-item report-summary-insurance">
+                    <span class="report-summary-label"><i class="fa-solid fa-shield-heart"></i> Insurance Covered</span>
                     <span class="report-summary-value" id="reportInsuranceCovered">$0.00</span>
                 </div>
-                <div class="report-summary-item">
-                    <span class="report-summary-label">Net Out-of-Pocket</span>
+                <div class="report-summary-item report-summary-net">
+                    <span class="report-summary-label"><i class="fa-solid fa-wallet"></i> Net Out-of-Pocket</span>
                     <span class="report-summary-value highlight-net" id="reportNet">$0.00</span>
                 </div>
-                <div class="report-summary-item">
-                    <span class="report-summary-label">Total Number of Entries</span>
+                <div class="report-summary-item report-summary-entries">
+                    <span class="report-summary-label"><i class="fa-solid fa-list-ol"></i> Total Number of Entries</span>
                     <span class="report-summary-value" id="reportEntries">0</span>
                 </div>
-                <div class="report-summary-item">
-                    <span class="report-summary-label">Date Range</span>
+                <div class="report-summary-item report-summary-dates">
+                    <span class="report-summary-label"><i class="fa-solid fa-calendar-days"></i> Date Range</span>
                     <span class="report-summary-value" id="reportDateRange">—</span>
                 </div>
-                <div class="report-summary-item">
-                    <span class="report-summary-label">Largest Single Expense</span>
+                <div class="report-summary-item report-summary-largest">
+                    <span class="report-summary-label"><i class="fa-solid fa-arrow-up"></i> Largest Single Expense</span>
                     <span class="report-summary-value" id="reportLargest">$0.00</span>
                 </div>
             </div>
@@ -111,6 +112,8 @@
                     <tr>
                         <th>Category</th>
                         <th class="text-right">Amount</th>
+                        <th class="text-right">Insurance Covered</th>
+                        <th class="text-right">Coverage %</th>
                         <th class="text-right">% of Total</th>
                     </tr>
                 </thead>
@@ -121,6 +124,8 @@
                     <tr>
                         <td><strong>Total</strong></td>
                         <td class="text-right"><strong id="reportCategoryTotal">$0.00</strong></td>
+                        <td class="text-right"><strong id="reportCategoryInsuranceTotal">$0.00</strong></td>
+                        <td class="text-right"><strong id="reportCategoryCoverageTotal">—</strong></td>
                         <td class="text-right"><strong>100%</strong></td>
                     </tr>
                 </tfoot>
@@ -179,6 +184,7 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
+    <script src="db.js"></script>
     <script src="auth.js"></script>
     <script src="report.js"></script>
 </body>

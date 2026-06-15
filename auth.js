@@ -11,20 +11,23 @@ const VERIFY_IV = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
 let authResolve = null;
 let currentUser = null;
-let currentPassword = null;
+let cachedKeyMaterial = null;
 
 // ========================================
 // Web Crypto API Helpers
 // ========================================
 
-async function deriveKey(password, salt) {
-    const keyMaterial = await crypto.subtle.importKey(
+async function importPassword(password) {
+    return await crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(password),
         'PBKDF2',
         false,
         ['deriveKey']
     );
+}
+
+async function deriveKeyFromMaterial(keyMaterial, salt) {
     return await crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
@@ -39,10 +42,20 @@ async function deriveKey(password, salt) {
     );
 }
 
-async function encryptData(data, password) {
+async function setPassword(password) {
+    cachedKeyMaterial = await importPassword(password);
+    password = null; // help GC
+}
+
+async function deriveKey(salt) {
+    if (!cachedKeyMaterial) throw new Error('No password set');
+    return deriveKeyFromMaterial(cachedKeyMaterial, salt);
+}
+
+async function encryptData(data) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveKey(password, salt);
+    const key = await deriveKey(salt);
     const encoded = new TextEncoder().encode(JSON.stringify(data));
     const encrypted = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
@@ -56,7 +69,7 @@ async function encryptData(data, password) {
     return btoa(String.fromCharCode(...result));
 }
 
-async function decryptData(encryptedBase64, password) {
+async function decryptData(encryptedBase64) {
     const binary = atob(encryptedBase64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
@@ -65,7 +78,7 @@ async function decryptData(encryptedBase64, password) {
     const salt = bytes.slice(0, 16);
     const iv = bytes.slice(16, 28);
     const ciphertext = bytes.slice(28);
-    const key = await deriveKey(password, salt);
+    const key = await deriveKey(salt);
     const decrypted = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv },
         key,
@@ -81,7 +94,8 @@ async function decryptData(encryptedBase64, password) {
 async function createVerificationHash(password) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveKey(password, salt);
+    const keyMaterial = await importPassword(password);
+    const key = await deriveKeyFromMaterial(keyMaterial, salt);
     const encrypted = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         key,
@@ -98,7 +112,8 @@ async function verifyPassword(password, username, hash) {
     try {
         const salt = getUserSalt(username);
         const iv = getUserIv(username);
-        const key = await deriveKey(password, salt);
+        const keyMaterial = await importPassword(password);
+        const key = await deriveKeyFromMaterial(keyMaterial, salt);
         const binary = atob(hash);
         const encrypted = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) {
@@ -182,17 +197,26 @@ function setUserIv(username, ivB64) {
 // ========================================
 
 async function saveUserData(year, data) {
-    if (!currentUser || !currentPassword) return;
-    const encrypted = await encryptData(data, currentPassword);
-    localStorage.setItem(`medtrack_data_${currentUser}_${year}`, encrypted);
+    if (!currentUser || !cachedKeyMaterial) return;
+    // Strip receiptData before encryption, save receipts separately
+    const stripped = data.map(exp => {
+        const clone = { ...exp };
+        delete clone.receiptData;
+        return clone;
+    });
+    const encrypted = await encryptData(stripped);
+    await window.db.setItem('expenses', window.db.getExpenseKey(currentUser, year), encrypted);
+    await window.db.saveReceipts(currentUser, year, data);
 }
 
 async function loadUserData(year) {
-    if (!currentUser || !currentPassword) return [];
-    const encrypted = localStorage.getItem(`medtrack_data_${currentUser}_${year}`);
+    if (!currentUser || !cachedKeyMaterial) return [];
+    const encrypted = await window.db.getItem('expenses', window.db.getExpenseKey(currentUser, year));
     if (!encrypted) return [];
     try {
-        return await decryptData(encrypted, currentPassword);
+        const decrypted = await decryptData(encrypted);
+        if (!Array.isArray(decrypted)) return [];
+        return await window.db.loadReceipts(currentUser, year, decrypted);
     } catch (e) {
         console.error('Failed to decrypt data for year', year, e);
         return [];
@@ -203,28 +227,32 @@ function getCurrentUser() {
     return currentUser;
 }
 
-function getCurrentPassword() {
-    return currentPassword;
-}
-
-function logout() {
+async function logout() {
     const user = currentUser;
     currentUser = null;
-    currentPassword = null;
+    cachedKeyMaterial = null;
     localStorage.removeItem('medtrack_current_user');
-    try { sessionStorage.removeItem('medtrack_current_password'); } catch (e) {}
-    
-    // Clear all encrypted data for this user to prevent stale data on shared computers
-    if (user) {
-        const prefix = `medtrack_data_${user}_`;
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(prefix)) {
-                localStorage.removeItem(key);
+
+    // Clear all IndexedDB data for this user to prevent stale data on shared computers
+    if (user && window.db) {
+        try {
+            const expenseKeys = await window.db.getAllKeys('expenses');
+            for (const key of expenseKeys) {
+                if (key.startsWith(`expenses_${user}_`)) {
+                    await window.db.removeItem('expenses', key);
+                }
             }
+            const receiptKeys = await window.db.getAllKeys('receipts');
+            for (const key of receiptKeys) {
+                if (key.startsWith(`receipt_${user}_`)) {
+                    await window.db.removeItem('receipts', key);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to clear IndexedDB during logout', e);
         }
     }
-    
+
     location.reload();
 }
 
@@ -240,22 +268,11 @@ function initAuth() {
             return;
         }
         const savedUser = localStorage.getItem('medtrack_current_user');
-        const savedPassword = (() => { try { return sessionStorage.getItem('medtrack_current_password'); } catch (e) { return null; } })();
-
-        if (savedUser && savedPassword && hasUser(savedUser)) {
-            const hash = getVerificationHash(savedUser);
-            verifyPassword(savedPassword, savedUser, hash).then(valid => {
-                if (valid) {
-                    onLoginSuccess(savedUser, savedPassword);
-                } else {
-                    try { sessionStorage.removeItem('medtrack_current_password'); } catch (e) {}
-                    renderAuthOverlay(savedUser);
-                }
-            });
-            return;
+        if (savedUser && hasUser(savedUser)) {
+            renderAuthOverlay(savedUser);
+        } else {
+            renderAuthOverlay();
         }
-
-        renderAuthOverlay(savedUser);
     });
 }
 
@@ -272,7 +289,7 @@ function renderAuthOverlay(savedUser, unsupported = false) {
         overlay.innerHTML = `
             <div class="auth-card">
                 <div class="auth-logo"><i class="fa-solid fa-heart-pulse"></i><span>MedTrack Pro</span></div>
-                <div class="auth-error" style="display:block">
+                <div class="auth-error visible">
                     <i class="fa-solid fa-circle-exclamation"></i>
                     Your browser does not support the Web Crypto API required for encryption.
                     Please use a modern browser (Chrome, Firefox, Safari, Edge).
@@ -316,7 +333,7 @@ function renderAuthOverlay(savedUser, unsupported = false) {
             </div>
             ` : ''}
 
-            <div class="auth-tabs" id="authTabs" style="${isReturning ? 'display:none' : ''}">
+            <div class="auth-tabs ${isReturning ? 'hidden' : ''}" id="authTabs">
                 <button type="button" class="auth-tab active" data-tab="login" id="authTabLogin">Sign In</button>
                 <button type="button" class="auth-tab" data-tab="signup" id="authTabSignup">Create Account</button>
             </div>
@@ -451,7 +468,7 @@ function renderAuthOverlay(savedUser, unsupported = false) {
     if (switchBtn) {
         switchBtn.addEventListener('click', () => {
             document.getElementById('authWelcome').classList.add('hidden');
-            document.getElementById('authTabs').style.display = 'flex';
+            document.getElementById('authTabs').classList.remove('hidden');
             loginForm.classList.remove('hidden');
             document.getElementById('authLoginUser').focus();
             clearAuthError();
@@ -462,7 +479,7 @@ function renderAuthOverlay(savedUser, unsupported = false) {
 function hideAuthOverlay() {
     const overlay = document.getElementById('authOverlay');
     if (overlay) {
-        overlay.style.opacity = '0';
+        overlay.classList.add('fade-out');
         setTimeout(() => overlay.remove(), 300);
     }
 }
@@ -509,7 +526,8 @@ async function handleLogin(e) {
         return;
     }
 
-    onLoginSuccess(username, password);
+    await onLoginSuccess(username, password);
+    password = null;
 }
 
 async function handleWelcomeLogin(e) {
@@ -530,7 +548,8 @@ async function handleWelcomeLogin(e) {
         return;
     }
 
-    onLoginSuccess(username, password);
+    await onLoginSuccess(username, password);
+    password = null;
 }
 
 async function handleSignup(e) {
@@ -567,19 +586,68 @@ async function handleSignup(e) {
     setUserSalt(username, salt);
     setUserIv(username, iv);
 
-    // Pre-create empty encrypted data for current year so login works immediately
-    const year = new Date().getFullYear();
-    const encrypted = await encryptData([], password);
-    localStorage.setItem(`medtrack_data_${username}_${year}`, encrypted);
-
-    onLoginSuccess(username, password);
+    await onLoginSuccess(username, password);
+    password = null;
 }
 
-function onLoginSuccess(username, password) {
+// ========================================
+// Legacy Data Migration
+// ========================================
+
+async function migrateLegacyData(user) {
+    if (!window.db) return false;
+    let migrated = false;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(`medtrack_data_${user}_`)) {
+            const encrypted = localStorage.getItem(key);
+            if (encrypted) {
+                const year = key.replace(`medtrack_data_${user}_`, '');
+                await window.db.setItem('expenses', window.db.getExpenseKey(user, year), encrypted);
+                // Migrate inline receipts to separate store
+                try {
+                    const decrypted = await decryptData(encrypted);
+                    if (Array.isArray(decrypted)) {
+                        await window.db.saveReceipts(user, year, decrypted);
+                        // Re-save without receiptData
+                        const stripped = decrypted.map(exp => {
+                            const clone = { ...exp };
+                            delete clone.receiptData;
+                            return clone;
+                        });
+                        const reEncrypted = await encryptData(stripped);
+                        await window.db.setItem('expenses', window.db.getExpenseKey(user, year), reEncrypted);
+                    }
+                } catch (e) {
+                    console.warn('Migration failed for year', year, e);
+                }
+                localStorage.removeItem(key);
+                migrated = true;
+            }
+        }
+    }
+    return migrated;
+}
+
+// ========================================
+// Login Success
+// ========================================
+
+async function onLoginSuccess(username, password) {
     currentUser = username;
-    currentPassword = password;
+    await setPassword(password);
+    password = null; // help GC
     localStorage.setItem('medtrack_current_user', username);
-    try { sessionStorage.setItem('medtrack_current_password', password); } catch (e) {}
+
+    // Migrate any legacy localStorage data to IndexedDB
+    migrateLegacyData(username).then(migrated => {
+        if (migrated) {
+            console.log('Migrated legacy localStorage data to IndexedDB');
+        }
+    }).catch(err => {
+        console.warn('Migration check failed', err);
+    });
+
     hideAuthOverlay();
     if (authResolve) {
         authResolve();
@@ -623,7 +691,6 @@ function escapeHtml(str) {
 window.initAuth = initAuth;
 window.logout = logout;
 window.getCurrentUser = getCurrentUser;
-// getCurrentPassword intentionally not exposed to window for security
 window.saveUserData = saveUserData;
 window.loadUserData = loadUserData;
 window.renderUserBadge = renderUserBadge;

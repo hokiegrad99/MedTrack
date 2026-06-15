@@ -74,6 +74,11 @@ async function initReport() {
         backBtn.href = 'index.html?year=' + encodeURIComponent(year);
     }
 
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+        printBtn.addEventListener('click', () => window.print());
+    }
+
     document.getElementById('reportYear').textContent = year;
     document.title = `Medical Expense Tax Summary — ${year}`;
 
@@ -136,7 +141,7 @@ function renderReport(expenses, year) {
     });
 
     // Category breakdown
-    renderCategoryBreakdown(expenses, netTotal);
+    renderCategoryBreakdown(expenses, total);
 
     // Itemized list
     renderItemizedList(sorted, netTotal);
@@ -169,16 +174,22 @@ function renderLastExport() {
 function renderCategoryBreakdown(expenses, total) {
     const tbody = document.getElementById('reportCategoryBody');
     const totalEl = document.getElementById('reportCategoryTotal');
+    const insuranceTotalEl = document.getElementById('reportCategoryInsuranceTotal');
+    const coverageTotalEl = document.getElementById('reportCategoryCoverageTotal');
 
     if (expenses.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:24px">No expenses recorded for this tax year.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="report-empty">No expenses recorded for this tax year.</td></tr>';
         totalEl.textContent = '$0.00';
+        if (insuranceTotalEl) insuranceTotalEl.textContent = '$0.00';
+        if (coverageTotalEl) coverageTotalEl.textContent = '—';
         return;
     }
 
     const categoryTotals = {};
+    const categoryInsuranceTotals = {};
     expenses.forEach(exp => {
         categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
+        categoryInsuranceTotals[exp.category] = (categoryInsuranceTotals[exp.category] || 0) + (exp.insuranceCovered || 0);
     });
 
     const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
@@ -187,21 +198,30 @@ function renderCategoryBreakdown(expenses, total) {
         const percent = total > 0 ? ((amount / total) * 100).toFixed(1) : 0;
         const color = categoryColors[category] || '#64748b';
         const iconClass = categoryIcons[category] || 'fa-notes-medical';
+        const insurance = categoryInsuranceTotals[category] || 0;
+        const coverage = amount > 0 ? ((insurance / amount) * 100).toFixed(1) : 0;
 
+        const cssClass = category.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         return `
             <tr>
                 <td>
-                    <span class="report-category-badge" style="color: ${color};">
+                    <span class="report-category-badge cat-icon-${cssClass}">
                         <i class="fa-solid ${iconClass}"></i> ${escapeHtml(category)}
                     </span>
                 </td>
                 <td class="text-right">${formatCurrency(amount)}</td>
+                <td class="text-right">${insurance > 0 ? formatCurrency(insurance) : '—'}</td>
+                <td class="text-right">${insurance > 0 ? coverage + '%' : '—'}</td>
                 <td class="text-right">${percent}%</td>
             </tr>
         `;
     }).join('');
 
+    const totalInsurance = Object.values(categoryInsuranceTotals).reduce((sum, v) => sum + v, 0);
+    const totalCoverage = total > 0 ? ((totalInsurance / total) * 100).toFixed(1) : 0;
     totalEl.textContent = formatCurrency(total);
+    if (insuranceTotalEl) insuranceTotalEl.textContent = formatCurrency(totalInsurance);
+    if (coverageTotalEl) coverageTotalEl.textContent = totalInsurance > 0 ? totalCoverage + '%' : '—';
 }
 
 function showToast(message, type = 'success') {
@@ -240,7 +260,7 @@ function renderItemizedList(expenses, netTotal) {
     const netEl = document.getElementById('reportNetTotal');
 
     if (expenses.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px">No expenses recorded for this tax year.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="report-empty">No expenses recorded for this tax year.</td></tr>';
         totalEl.textContent = '$0.00';
         if (insuranceEl) insuranceEl.textContent = '$0.00';
         if (netEl) netEl.textContent = '$0.00';
@@ -251,7 +271,7 @@ function renderItemizedList(expenses, netTotal) {
     let totalInsurance = 0;
 
     tbody.innerHTML = expenses.map((exp, index) => {
-        const color = categoryColors[exp.category] || '#64748b';
+        const cssClass = exp.category.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         const iconClass = categoryIcons[exp.category] || 'fa-notes-medical';
         const insurance = exp.insuranceCovered || 0;
         const net = exp.amount - insurance;
@@ -263,7 +283,7 @@ function renderItemizedList(expenses, netTotal) {
                 <td>${index + 1}</td>
                 <td>${formatDate(exp.date)}</td>
                 <td>
-                    <span class="report-category-badge" style="color: ${color};">
+                    <span class="report-category-badge cat-icon-${cssClass}">
                         <i class="fa-solid ${iconClass}"></i> ${escapeHtml(exp.category)}
                     </span>
                 </td>

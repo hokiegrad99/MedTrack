@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com 'sha256-aqNNdDLnnrDOnTNdkJpYlAxKVJtLt9CtFLklmInuUAE=' 'unsafe-hashes'; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0d9488">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <title>MedTrack Pro — Medical Expense Tracker</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=16">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -43,13 +44,21 @@
                 </button>
                 <div class="tax-year-selector">
                     <label for="taxYear">Tax Year</label>
-                    <select id="taxYear"></select>
+                    <div class="tax-year-row">
+                        <select id="taxYear"></select>
+                        <div class="custom-year-input">
+                            <input type="number" id="customTaxYear" placeholder="Year" aria-label="Enter custom tax year">
+                            <button type="button" class="btn-icon" id="customTaxYearBtn" title="Go to year" aria-label="Go to custom year">
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <button class="btn btn-outline" id="importBtn" aria-label="Import CSV">
                     <i class="fa-solid fa-upload"></i> Import
                 </button>
-                <input type="file" id="importFile" accept=".csv,.json" style="display:none">
-                <a href="report.html" class="btn btn-outline" id="reportBtn" aria-label="Open tax summary report" onclick="event.preventDefault(); window.location.href='report.html?year=' + document.getElementById('taxYear').value;">
+                <input type="file" id="importFile" accept=".csv,.json" class="hidden-input">
+                <a href="report.html" class="btn btn-outline" id="reportBtn" aria-label="Open tax summary report">
                     <i class="fa-solid fa-file-lines"></i> Tax Report
                 </a>
                 <button class="btn btn-outline" id="exportBtn">
@@ -68,7 +77,7 @@
 
         <!-- Summary Cards -->
         <section class="summary-cards">
-            <div class="card summary-card">
+            <div class="card summary-card summary-card-total">
                 <div class="summary-icon total">
                     <i class="fa-solid fa-receipt"></i>
                 </div>
@@ -77,7 +86,7 @@
                     <span class="summary-value" id="totalExpenses">$0.00</span>
                 </div>
             </div>
-            <div class="card summary-card">
+            <div class="card summary-card summary-card-net">
                 <div class="summary-icon net">
                     <i class="fa-solid fa-wallet"></i>
                 </div>
@@ -86,7 +95,7 @@
                     <span class="summary-value" id="netExpenses">$0.00</span>
                 </div>
             </div>
-            <div class="card summary-card">
+            <div class="card summary-card summary-card-insurance">
                 <div class="summary-icon insurance">
                     <i class="fa-solid fa-shield-heart"></i>
                 </div>
@@ -95,7 +104,7 @@
                     <span class="summary-value" id="totalInsuranceCovered">$0.00</span>
                 </div>
             </div>
-            <div class="card summary-card">
+            <div class="card summary-card summary-card-count">
                 <div class="summary-icon count">
                     <i class="fa-solid fa-list-ol"></i>
                 </div>
@@ -221,8 +230,19 @@
                                 <option value="Transportation">Transportation</option>
                                 <option value="Other">Other</option>
                             </select>
+                            <div class="date-range-inputs">
+                                <input type="date" id="dateRangeFrom" aria-label="From date">
+                                <span class="date-range-separator">to</span>
+                                <input type="date" id="dateRangeTo" aria-label="To date">
+                            </div>
+                            <select id="itemsPerPage" aria-label="Items per page">
+                                <option value="20">20 per page</option>
+                                <option value="50">50 per page</option>
+                                <option value="100">100 per page</option>
+                            </select>
                         </div>
                     </div>
+                    <div class="table-counter" id="tableCounter"></div>
                     <div class="table-wrapper">
                         <table class="expense-table" id="expenseTable">
                             <thead>
@@ -250,6 +270,14 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                    <div class="table-footer">
+                        <button class="btn btn-outline load-more-btn hidden" id="loadMoreBtn">
+                            <i class="fa-solid fa-chevron-down"></i> Show next 20 transactions
+                        </button>
+                        <button class="btn btn-outline show-all-btn hidden" id="showAllBtn">
+                            <i class="fa-solid fa-expand"></i> Show All
+                        </button>
                     </div>
                 </div>
             </section>
@@ -296,6 +324,7 @@
         </div>
     </div>
 
+    <script src="db.js"></script>
     <script src="auth.js"></script>
     <script src="app.js"></script>
 </body>

@@ -16,6 +16,10 @@ const state = {
     searchQuery: '',
     deleteTargetId: null,
     editTargetId: null,
+    tablePage: 1,
+    itemsPerPage: 20,
+    dateRangeFrom: '',
+    dateRangeTo: '',
     categoryColors: {
         'Doctor Visit': '#0d9488',
         'Prescription': '#3b82f6',
@@ -52,6 +56,8 @@ const state = {
 
 const elements = {
     taxYear: document.getElementById('taxYear'),
+    customTaxYear: document.getElementById('customTaxYear'),
+    customTaxYearBtn: document.getElementById('customTaxYearBtn'),
     exportBtn: document.getElementById('exportBtn'),
     exportJsonBtn: document.getElementById('exportJsonBtn'),
     totalExpenses: document.getElementById('totalExpenses'),
@@ -79,6 +85,12 @@ const elements = {
     filterCategory: document.getElementById('filterCategory'),
     expenseTable: document.getElementById('expenseTable'),
     expenseTableBody: document.getElementById('expenseTableBody'),
+    loadMoreBtn: document.getElementById('loadMoreBtn'),
+    showAllBtn: document.getElementById('showAllBtn'),
+    tableCounter: document.getElementById('tableCounter'),
+    itemsPerPage: document.getElementById('itemsPerPage'),
+    dateRangeFrom: document.getElementById('dateRangeFrom'),
+    dateRangeTo: document.getElementById('dateRangeTo'),
     toastContainer: document.getElementById('toastContainer'),
     deleteModal: document.getElementById('deleteModal'),
     cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
@@ -90,7 +102,8 @@ const elements = {
     cancelImportBtn: document.getElementById('cancelImportBtn'),
     confirmImportBtn: document.getElementById('confirmImportBtn'),
     importCount: document.getElementById('importCount'),
-    darkModeToggle: document.getElementById('darkModeToggle')
+    darkModeToggle: document.getElementById('darkModeToggle'),
+    reportBtn: document.getElementById('reportBtn')
 };
 
 // ========================================
@@ -145,13 +158,70 @@ function toggleDarkMode() {
 
 function populateTaxYearOptions() {
     const currentYear = new Date().getFullYear();
-    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+    for (let y = currentYear + 5; y >= currentYear; y--) {
         const option = document.createElement('option');
         option.value = y;
         option.textContent = y;
         if (y === currentYear) option.selected = true;
         elements.taxYear.appendChild(option);
     }
+}
+
+async function handleTaxYearChange(e) {
+    const year = parseInt(e.target.value);
+    state.taxYear = year;
+    state.tablePage = 1;
+    await loadData();
+    renderAll();
+    // Update URL so a bookmark or refresh keeps the current year
+    if (window.history.replaceState) {
+        window.history.replaceState({}, document.title, '?year=' + year);
+    }
+}
+
+function handleCustomYear() {
+    const rawValue = elements.customTaxYear.value.trim();
+    const year = parseInt(rawValue, 10);
+
+    if (isNaN(year) || !rawValue) {
+        showToast('Please enter a valid year', 'error');
+        return;
+    }
+
+    if (year < 1900 || year > 2100) {
+        showToast('Year must be between 1900 and 2100', 'error');
+        return;
+    }
+
+    // Check if year already exists in dropdown
+    let option = elements.taxYear.querySelector(`option[value="${year}"]`);
+    if (!option) {
+        // Add new option in sorted order
+        const options = Array.from(elements.taxYear.options);
+        let inserted = false;
+        for (let i = 0; i < options.length; i++) {
+            if (parseInt(options[i].value) < year) {
+                const newOption = document.createElement('option');
+                newOption.value = year;
+                newOption.textContent = year;
+                elements.taxYear.insertBefore(newOption, options[i]);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) {
+            const newOption = document.createElement('option');
+            newOption.value = year;
+            newOption.textContent = year;
+            elements.taxYear.appendChild(newOption);
+        }
+        option = elements.taxYear.querySelector(`option[value="${year}"]`);
+    }
+
+    option.selected = true;
+    elements.customTaxYear.value = '';
+    // Dispatch change event so the standard tax-year handler runs everything consistently
+    elements.taxYear.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function setDefaultDate() {
@@ -161,10 +231,11 @@ function setDefaultDate() {
 let searchDebounceTimer = null;
 
 function setupEventListeners() {
-    elements.taxYear.addEventListener('change', async (e) => {
-        state.taxYear = parseInt(e.target.value);
-        await loadData();
-        renderAll();
+    elements.taxYear.addEventListener('change', handleTaxYearChange);
+
+    elements.customTaxYearBtn.addEventListener('click', handleCustomYear);
+    elements.customTaxYear.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleCustomYear();
     });
 
     elements.expenseForm.addEventListener('submit', handleFormSubmit);
@@ -182,12 +253,32 @@ function setupEventListeners() {
         clearTimeout(searchDebounceTimer);
         searchDebounceTimer = setTimeout(() => {
             state.searchQuery = e.target.value.toLowerCase();
+            state.tablePage = 1;
             renderTable();
         }, 200);
     });
 
     elements.filterCategory.addEventListener('change', (e) => {
         state.filterCategory = e.target.value;
+        state.tablePage = 1;
+        renderTable();
+    });
+
+    elements.itemsPerPage.addEventListener('change', (e) => {
+        state.itemsPerPage = parseInt(e.target.value, 10);
+        state.tablePage = 1;
+        renderTable();
+    });
+
+    elements.dateRangeFrom.addEventListener('change', (e) => {
+        state.dateRangeFrom = e.target.value;
+        state.tablePage = 1;
+        renderTable();
+    });
+
+    elements.dateRangeTo.addEventListener('change', (e) => {
+        state.dateRangeTo = e.target.value;
+        state.tablePage = 1;
         renderTable();
     });
 
@@ -202,6 +293,22 @@ function setupEventListeners() {
     elements.deleteModal.addEventListener('click', (e) => {
         if (e.target === elements.deleteModal) hideDeleteModal();
     });
+
+    // Load more button
+    if (elements.loadMoreBtn) {
+        elements.loadMoreBtn.addEventListener('click', () => {
+            state.tablePage += 1;
+            renderTable();
+        });
+    }
+
+    // Show all button
+    if (elements.showAllBtn) {
+        elements.showAllBtn.addEventListener('click', () => {
+            state.tablePage = Infinity;
+            renderTable();
+        });
+    }
 
     // Event delegation for edit/delete buttons (replaces inline onclick handlers)
     elements.expenseTableBody.addEventListener('click', (e) => {
@@ -248,6 +355,13 @@ function setupEventListeners() {
     // Import handlers
     elements.importBtn.addEventListener('click', () => elements.importFile.click());
     elements.importFile.addEventListener('change', handleImportFile);
+
+    if (elements.reportBtn) {
+        elements.reportBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = 'report.html?year=' + encodeURIComponent(elements.taxYear.value);
+        });
+    }
     elements.cancelImportBtn.addEventListener('click', hideImportModal);
     elements.confirmImportBtn.addEventListener('click', () => confirmImport().catch(console.error));
     elements.importModal.addEventListener('click', (e) => {
@@ -282,23 +396,8 @@ async function loadData() {
     }
 }
 
-function estimateStorageUsage() {
-    let total = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        const value = localStorage.getItem(key) || '';
-        total += (key.length + value.length) * 2; // UTF-16 bytes
-    }
-    return total;
-}
-
 async function saveData() {
     try {
-        const usage = estimateStorageUsage();
-        const max = 5 * 1024 * 1024; // ~5MB typical localStorage limit
-        if (usage > max * 0.85) {
-            showToast('Warning: browser storage is nearly full. Export and clear old data soon.', 'warning');
-        }
         await saveUserData(state.taxYear, state.expenses);
     } catch (e) {
         showToast('Error saving data. Storage may be full.', 'error');
@@ -393,6 +492,7 @@ async function handleFormSubmit(e) {
     }
 
     await saveData();
+    state.tablePage = 1;
     renderAll();
 }
 
@@ -506,7 +606,6 @@ function populateEditForm(id) {
         removeLink.type = 'button';
         removeLink.className = 'btn-text remove-receipt';
         removeLink.textContent = 'Remove';
-        removeLink.style.marginLeft = '8px';
         removeLink.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -569,9 +668,16 @@ async function confirmDelete() {
 
     const index = state.expenses.findIndex(exp => exp.id === state.deleteTargetId);
     if (index !== -1) {
+        const expenseId = state.deleteTargetId;
         state.expenses.splice(index, 1);
+        // Remove orphaned receipt from IndexedDB
+        const user = getCurrentUser();
+        if (user && window.db) {
+            await window.db.removeReceipt(user, state.taxYear, expenseId);
+        }
         await saveData();
         showToast('Expense deleted', 'success');
+        state.tablePage = 1;
         renderAll();
     }
 
@@ -589,6 +695,7 @@ function handleSort(column) {
         state.sortColumn = column;
         state.sortDirection = 'asc';
     }
+    state.tablePage = 1;
     renderTable();
     updateSortIcons();
 }
@@ -608,6 +715,14 @@ function getFilteredAndSortedExpenses() {
             (exp.description && exp.description.toLowerCase().includes(state.searchQuery)) ||
             exp.category.toLowerCase().includes(state.searchQuery)
         );
+    }
+
+    // Date range filter
+    if (state.dateRangeFrom) {
+        result = result.filter(exp => exp.date >= state.dateRangeFrom);
+    }
+    if (state.dateRangeTo) {
+        result = result.filter(exp => exp.date <= state.dateRangeTo);
     }
 
     // Sort
@@ -660,6 +775,28 @@ function updateSortIcons() {
             th.setAttribute('aria-sort', 'none');
         }
     });
+}
+
+// ========================================
+// Category-to-CSS-class helpers
+// ========================================
+
+function catClass(category) {
+    return category.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+// ========================================
+// Dynamic Stylesheet (CSP-safe)
+// ========================================
+
+function updateDynamicStyles(css) {
+    let styleEl = document.getElementById('medtrack-dynamic-styles');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'medtrack-dynamic-styles';
+        document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = css;
 }
 
 // ========================================
@@ -730,22 +867,26 @@ function renderBreakdown() {
     const sortedCategories = Object.entries(categoryTotals)
         .sort((a, b) => b[1] - a[1]);
 
-    elements.breakdownList.innerHTML = sortedCategories.map(([category, amount]) => {
+    let dynamicCss = '';
+    elements.breakdownList.innerHTML = sortedCategories.map(([category, amount], index) => {
         const percent = total > 0 ? ((amount / total) * 100).toFixed(1) : 0;
-        const color = state.categoryColors[category] || '#64748b';
+        const cssClass = catClass(category);
         const iconClass = state.categoryIcons[category] || 'fa-notes-medical';
+        dynamicCss += `.breakdown-bar-fill.bar-width-${index} { width: ${percent}%; }\n`;
 
         return `
             <div class="breakdown-item">
-                <span class="breakdown-category"><i class="fa-solid ${iconClass}" style="color:${color};margin-right:6px;"></i>${category}</span>
+                <span class="breakdown-category"><i class="fa-solid ${iconClass} cat-icon-${cssClass} mr-6"></i>${category}</span>
                 <div class="breakdown-bar-track">
-                    <div class="breakdown-bar-fill" style="width: ${percent}%; background: ${color};"></div>
+                    <div class="breakdown-bar-fill cat-bar-${cssClass} bar-width-${index}"></div>
                 </div>
                 <span class="breakdown-amount">${formatCurrency(amount)}</span>
                 <span class="breakdown-percent">${percent}%</span>
             </div>
         `;
     }).join('');
+
+    updateDynamicStyles(dynamicCss);
 }
 
 function renderTable() {
@@ -763,22 +904,38 @@ function renderTable() {
                 </td>
             </tr>
         `;
+        if (elements.loadMoreBtn) elements.loadMoreBtn.classList.add('hidden');
+        if (elements.showAllBtn) elements.showAllBtn.classList.add('hidden');
+        if (elements.tableCounter) elements.tableCounter.textContent = '';
         return;
     }
 
-    elements.expenseTableBody.innerHTML = expenses.map((exp, index) => {
-        const color = state.categoryColors[exp.category] || '#64748b';
+    const limit = state.tablePage * state.itemsPerPage;
+    const visible = expenses.slice(0, limit);
+    const hasMore = expenses.length > visible.length;
+
+    if (elements.tableCounter) {
+        if (visible.length === expenses.length) {
+            elements.tableCounter.textContent = `Showing all ${expenses.length} transactions`;
+        } else {
+            elements.tableCounter.textContent = `Showing ${visible.length} of ${expenses.length} transactions`;
+        }
+    }
+
+    elements.expenseTableBody.innerHTML = visible.map((exp, index) => {
+        const cssClass = catClass(exp.category);
         const iconClass = state.categoryIcons[exp.category] || 'fa-notes-medical';
         const receiptHtml = exp.receiptData && isValidReceiptData(exp.receiptData)
             ? `<a href="${exp.receiptData}" target="_blank" class="receipt-icon" title="${escapeHtml(exp.receiptName || 'View receipt')}"><i class="fa-solid fa-file-image"></i></a>`
             : `<span class="receipt-missing"><i class="fa-regular fa-file"></i></span>`;
         const netAmount = exp.amount - (exp.insuranceCovered || 0);
+        const delayClass = Math.min(index, 20);
 
         return `
-            <tr style="animation-delay: ${Math.min(index * 0.03, 0.4)}s">
+            <tr class="row-delay-${delayClass}">
                 <td>${formatDate(exp.date)}</td>
                 <td>
-                    <span class="category-badge" style="background: ${color}15; color: ${color};">
+                    <span class="category-badge cat-badge-${cssClass}">
                         <i class="fa-solid ${iconClass}"></i> ${exp.category}
                     </span>
                 </td>
@@ -799,6 +956,20 @@ function renderTable() {
             </tr>
         `;
     }).join('');
+
+    if (elements.loadMoreBtn) {
+        if (hasMore) {
+            elements.loadMoreBtn.classList.remove('hidden');
+            const remaining = expenses.length - visible.length;
+            elements.loadMoreBtn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> Show next ${Math.min(remaining, state.itemsPerPage)} transactions (${remaining} remaining)`;
+        } else {
+            elements.loadMoreBtn.classList.add('hidden');
+        }
+    }
+
+    if (elements.showAllBtn) {
+        elements.showAllBtn.classList.toggle('hidden', !hasMore);
+    }
 }
 
 // ========================================
@@ -1062,20 +1233,20 @@ function showImportModal(toImport, skipped, duplicates) {
                             <td>${exp.insuranceCovered > 0 ? formatCurrency(exp.insuranceCovered) : '—'}</td>
                         </tr>
                     `).join('')}
-                    ${toImport.length > 20 ? `<tr><td colspan="5" style="text-align:center;color:var(--gray-400)">...and ${toImport.length - 20} more</td></tr>` : ''}
+                    ${toImport.length > 20 ? `<tr><td colspan="5" class="import-center">...and ${toImport.length - 20} more</td></tr>` : ''}
                 </tbody>
             </table>
         </div>
-        ` : '<p style="color:var(--gray-500)">No new expenses to import.</p>'}
+        ` : '<p class="import-muted">No new expenses to import.</p>'}
         ${skipped.length > 0 ? `
-        <div style="margin-top:12px">
-            <p style="font-size:0.8125rem;font-weight:600;color:var(--gray-600)">Skipped rows:</p>
+        <div class="import-mt">
+            <p class="import-label">Skipped rows:</p>
             <div class="import-preview">
                 <table>
                     <thead><tr><th>Row</th><th>Reason</th><th>Provider</th></tr></thead>
                     <tbody>
                         ${skipped.slice(0, 10).map(s => `<tr class="skip-row"><td>${s.row}</td><td>${escapeHtml(s.reason)}</td><td>${escapeHtml(s.preview)}</td></tr>`).join('')}
-                        ${skipped.length > 10 ? `<tr><td colspan="3" style="text-align:center;color:var(--gray-400)">...and ${skipped.length - 10} more</td></tr>` : ''}
+                        ${skipped.length > 10 ? `<tr><td colspan="3" class="import-center">...and ${skipped.length - 10} more</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -1120,6 +1291,7 @@ async function confirmImport() {
     await saveData();
     showToast(`${state.pendingImports.length} expense(s) imported successfully`, 'success');
     hideImportModal();
+    state.tablePage = 1;
     renderAll();
 }
 
