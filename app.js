@@ -790,13 +790,23 @@ function catClass(category) {
 // ========================================
 
 function updateDynamicStyles(css) {
-    let styleEl = document.getElementById('medtrack-dynamic-styles');
-    if (!styleEl) {
-        styleEl = document.createElement('style');
-        styleEl.id = 'medtrack-dynamic-styles';
-        document.head.appendChild(styleEl);
+    // Use a <link rel="stylesheet"> with a Blob URL instead of a <style> element
+    // so the dynamically-generated stylesheet is loaded as an external sheet
+    // and remains permitted by the page's strict CSP (which does not include 'unsafe-inline').
+    const existing = document.getElementById('medtrack-dynamic-styles');
+    if (existing) {
+        if (existing._blobUrl) URL.revokeObjectURL(existing._blobUrl);
+        existing.remove();
     }
-    styleEl.textContent = css;
+    const blob = new Blob([css], { type: 'text/css' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('link');
+    link.id = 'medtrack-dynamic-styles';
+    link.rel = 'stylesheet';
+    link.type = 'text/css';
+    link.href = url;
+    link._blobUrl = url; // remember so we can revoke on next render
+    document.head.appendChild(link);
 }
 
 // ========================================

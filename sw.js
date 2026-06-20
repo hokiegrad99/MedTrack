@@ -3,13 +3,13 @@
    Offline caching for GitHub Pages PWA
    ======================================== */
 
-const CACHE_NAME = 'medtrack-v16';
+const CACHE_NAME = 'medtrack-v17';
 const PRECACHE_URLS = [
   './',
   'index.html',
   'report.html',
-  'styles.css?v=16',
-  'report.css?v=16',
+  'styles.css?v=17',
+  'report.css?v=17',
   'app.js',
   'report.js',
   'auth.js',
